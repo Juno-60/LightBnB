@@ -17,19 +17,6 @@ const pool = new Pool({
  * @param {String} email The email of the user.
  * @return {Promise<{}>} A promise to the user.
  */
-// const getUserWithEmail = function(email) {
-//   let user;
-//   for (const userId in users) {
-//     user = users[userId];
-//     if (user.email.toLowerCase() === email.toLowerCase()) {
-//       break;
-//     } else {
-//       user = null;
-//     }
-//   }
-//   return Promise.resolve(user);
-// }
-
 const getUserWithEmail = (email) => {
   return pool
     .query(`SELECT * FROM users WHERE users.email = $1`, [email])
@@ -49,9 +36,7 @@ exports.getUserWithEmail = getUserWithEmail;
  * @param {string} id The id of the user.
  * @return {Promise<{}>} A promise to the user.
  */
-// const getUserWithId = function(id) {
-//   return Promise.resolve(users[id]);
-// }
+
 const getUserWithId = (id) => {
   return pool
     .query(`SELECT * FROM users WHERE users.id = $1`, [id])
@@ -64,7 +49,6 @@ const getUserWithId = (id) => {
       console.log(err.message);
     });
 };
-
 exports.getUserWithId = getUserWithId;
 
 
@@ -73,12 +57,6 @@ exports.getUserWithId = getUserWithId;
  * @param {{name: string, password: string, email: string}} user
  * @return {Promise<{}>} A promise to the user.
  */
-// const addUser =  function(user) {
-//   const userId = Object.keys(users).length + 1;
-//   user.id = userId;
-//   users[userId] = user;
-//   return Promise.resolve(user);
-// }
 const addUser = (user) => {
   console.log(user)
   return pool
@@ -107,10 +85,6 @@ exports.addUser = addUser;
  * @param {string} guest_id The id of the user.
  * @return {Promise<[{}]>} A promise to the reservations.
  */
-// const getAllReservations = function(guest_id, limit = 10) {
-//   return getAllProperties(null, 2);
-// }
-
 const getAllReservations = (guest_id) => {
   return pool
     .query(`
@@ -132,20 +106,57 @@ exports.getAllReservations = getAllReservations;
  * @param {*} limit The number of results to return.
  * @return {Promise<[{}]>}  A promise to the properties.
  */
-// const getAllProperties = function(options, limit = 10) {
-//   const limitedProperties = {};
-//   for (let i = 1; i <= limit; i++) {
-//     limitedProperties[i] = properties[i];
-//   }
-//   return Promise.resolve(limitedProperties);
-// }
-const getAllProperties = (options, limit = 10) => {
-  return pool
-    .query(`SELECT * FROM properties LIMIT $1`, [limit])
-    .then((result) => result.rows)
-    .catch((err) => {
-      console.log(err.message);
-    });
+const getAllProperties = function (options, limit = 10) {
+  // Setup an array to hold any parameters that may be available for the query
+  const queryParams = [];
+  // Start the query with all information that comes before the WHERE clause
+  let queryString = `
+  SELECT properties.*, avg(property_reviews.rating) as average_rating
+  FROM properties
+  JOIN property_reviews ON properties.id = property_id
+  `;
+  // Check if a city has been passed in as an option. 
+  // Add the city to the params array and create a WHERE clause for the city
+  if (options.city) {
+    queryParams.push(`%${options.city}%`);
+    queryString += `WHERE city LIKE $${queryParams.length} `;
+  }
+  // check if owner id has been passed in as an option
+  if (options.owner_id) {
+    queryParams.push(`${options.owner_id}`);
+    queryString += ` AND owner_id = ${queryParams.length}`
+  }
+  // check if minimum price per night is passed in as an option
+  if (options.minimum_price_per_night) {
+    queryParams.push(`${options.minimum_price_per_night}` * 100);
+    queryString += ` AND cost_per_night >= $${queryParams.length}`;
+  }
+  // check if max price per night is passed in as an option
+  if (options.maximum_price_per_night) {
+    queryParams.push(`${options.maximum_price_per_night}` * 100);
+    queryString += ` AND cost_per_night <= $${queryParams.length}`;
+  }
+  // Add any query that comes after the WHERE clause
+  queryString += `
+  GROUP BY properties.id
+  `;
+  // check if minimum rating is passed in as an option
+  if (options.minimum_rating) {
+    queryParams.push(`${options.minimum_rating}`);
+    queryString += `HAVING AVG(property_reviews.rating) >= $${queryParams.length}`;
+  }
+  // adds the limit param last, orders
+  queryParams.push(limit);
+  queryString += `
+  ORDER BY cost_per_night
+  LIMIT $${queryParams.length}
+  `;
+  
+  // Console log everything just to make sure we've done it right
+  // console.log(queryString, queryParams);
+
+  // run the query
+  return pool.query(queryString, queryParams).then((res) => res.rows);
 };
 exports.getAllProperties = getAllProperties;
 
